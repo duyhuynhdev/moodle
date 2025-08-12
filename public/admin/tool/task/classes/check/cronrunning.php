@@ -49,6 +49,21 @@ class cronrunning extends check {
     }
 
     /**
+     * Get status by time delta
+     * @param int $delta - time delta
+     * @return string
+     */
+    public static function get_status($delta): string {
+        $expectedfrequency = $CFG->expectedcronfrequency ?? MINSECS;
+        if ($delta > DAYSECS) {
+            return result::CRITICAL;
+        }
+        if ($delta > $expectedfrequency + MINSECS) {
+            return result::WARNING;
+        }
+        return result::OK;
+    }
+    /**
      * Return result
      * @return result
      */
@@ -72,11 +87,7 @@ class cronrunning extends check {
         $details = get_string('lastcronstart', 'tool_task', $formatdelta);
 
         if ($delta > $expectedfrequency + MINSECS) {
-            $status = result::WARNING;
-
-            if ($delta > DAYSECS) {
-                $status = result::CRITICAL;
-            }
+            $status = $this->get_status($delta);
 
             if (empty($lastcron)) {
                 if (empty($CFG->cronclionly)) {

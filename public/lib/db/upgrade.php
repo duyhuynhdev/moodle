@@ -930,22 +930,6 @@ function xmldb_main_upgrade($oldversion) {
         upgrade_main_savepoint(true, 2025040700.00);
     }
 
-    // Automatically generated Moodle v5.0.0 release upgrade line.
-    // Put any upgrade step following this.
-
-    if ($oldversion < 2025050900.01) {
-
-        // Define field custom_data to be added to task_log.
-        $table = new xmldb_table('task_log');
-        $field = new xmldb_field('custom_data', XMLDB_TYPE_TEXT, null, null, null, null, null, 'pid');
-
-        if (!$dbman->field_exists($table, $field)) {
-            $dbman->add_field($table, $field);
-        }
-        // Conditionally launch add field custom_data.
-        upgrade_main_savepoint(true, 2025050900.01);
-    }
-
     if ($oldversion < 2025051600.02) {
 
         // Changing precision of field name on table badge to (1333).
@@ -1631,5 +1615,19 @@ function xmldb_main_upgrade($oldversion) {
         upgrade_main_savepoint(true, 2025121200.01);
     }
 
+    // Automatically generated Moodle v5.0.0 release upgrade line.
+    // Put any upgrade step following this.
+
+    if ($oldversion < 2025123000.00) {
+        // Define field custom_data to be added to task_log.
+        $table = new xmldb_table('task_log');
+        $field = new xmldb_field('custom_data', XMLDB_TYPE_TEXT, null, null, null, null, null, 'pid');
+
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+        // Conditionally launch add field custom_data.
+        upgrade_main_savepoint(true, 2025123000.00);
+    }
     return true;
 }
