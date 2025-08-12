@@ -104,6 +104,7 @@ class task_logs extends system_report {
             'task_log:database',
             'task_log:id',
             'task_log:custom_data',
+            'task_log:result',
         ]);
 
         // Wrap the task name in a link.
@@ -115,15 +116,15 @@ class task_logs extends system_report {
 
         // Wrap the task result in a label.
         $this->get_column('task_log:result')
-            ->add_callback(static function(string $output, stdClass $row): string {
+            ->add_callback(static function (string $output, stdClass $row): string {
                 return html_writer::tag('span', $output, [
-                    'class' => 'badge ' . ( $row->success ? 'badge-success' : 'badge-danger' )
+                    'class' => 'badge ' . ( $row->success ? 'badge-success' : 'badge-danger' ),
                 ]);
             });
 
         // Nicely format the custom data.
         $this->get_column('task_log:custom_data')
-            ->add_callback(static function(string $output = null, stdClass $row): string {
+            ->add_callback(static function (?string $output, stdClass $row): string {
                 if (!$output) {
                     return '';
                 }
@@ -146,7 +147,7 @@ class task_logs extends system_report {
      * @return string
      */
     public function get_row_class(\stdClass $row): string {
-        return $row->c1_success ? '' : 'table-danger';
+        return $row->c11_success ? '' : 'table-danger';
     }
 
     /**
