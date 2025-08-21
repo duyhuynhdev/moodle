@@ -3821,13 +3821,14 @@ function guest_user() {
  *
  * Note: this function works only with non-mnet accounts!
  *
- * @param string $username  User's username (or also email if $CFG->authloginviaemail enabled)
- * @param string $password  User's password
+ * @param string $username User's username (or also email if $CFG->authloginviaemail enabled)
+ * @param string $password User's password
  * @param bool $ignorelockout useful when guessing is prevented by other mechanism such as captcha or SSO
  * @param int $failurereason login failure reason, can be used in renderers (it may disclose if account exists)
  * @param string|bool $logintoken If this is set to a string it is validated against the login token for the session.
  * @param string|bool $loginrecaptcha If this is set to a string it is validated against Google reCaptcha.
  * @return stdClass|false A {@link $USER} object or false if error
+ * @throws moodle_exception
  */
 function authenticate_user_login(
     $username,
@@ -3974,8 +3975,20 @@ function authenticate_user_login(
 
         // Before performing login actions, check if user still passes password policy, if admin setting is enabled.
         if (!empty($CFG->passwordpolicycheckonlogin)) {
+            $compmsg = check_password_compromised($password, $user);
+            if ($compmsg) {
+                global $DB;
+                // Set the password to empty, so it cannot be used again, locking the user out.
+                $DB->set_field('user', 'password', '', ['id' => $user->id]);
+                // Destroy all sessions for this user.
+                \core\session\manager::destroy_user_sessions($user->id);
+                // Redirect to the forgot password page with an error message.
+                $forgoturl = new \moodle_url('/login/forgot_password.php');
+                redirect($forgoturl, $compmsg, 1, \core\output\notification::NOTIFY_ERROR);
+            }
+
             $errmsg = '';
-            $passed = check_password_policy($password, $errmsg, $user);
+            $passed = check_password_policy($password, $errmsg, $user, false);
             if (!$passed) {
                 // First trigger event for failure.
                 $failedevent = \core\event\user_password_policy_failed::create_from_user($user);
@@ -4594,13 +4607,13 @@ function get_complete_user_data($field, $value, $mnethostid = null, $throwexcept
  * @param string $password the password to be checked against the password policy
  * @param string|null $errmsg the error message to display when the password doesn't comply with the policy.
  * @param stdClass|null $user the user object to perform password validation against. Defaults to null if not provided.
- *
+ * @param ?bool $compcheck The compromised check flag.
  * @return bool true if the password is valid according to the policy. false otherwise.
  */
-function check_password_policy(string $password, ?string &$errmsg, ?stdClass $user = null) {
+function check_password_policy(string $password, ?string &$errmsg, ?stdClass $user = null, ?bool $compcheck = true) {
     global $CFG;
     if (!empty($CFG->passwordpolicy) && !isguestuser($user)) {
-        $errors = get_password_policy_errors($password, $user);
+        $errors = get_password_policy_errors($password, $user, $compcheck);
 
         foreach ($errors as $error) {
             $errmsg .= '<div>' . $error . '</div>';
@@ -4611,15 +4624,35 @@ function check_password_policy(string $password, ?string &$errmsg, ?stdClass $us
 }
 
 /**
+ * Validate if a password against has been compromised
+ *
+ * @param string $password the password to be checked
+ * @param stdClass|null $user the user object to perform password validation against. Defaults to null if not provided.
+ *
+ * @return string An error message if password has been compromised.
+ */
+function check_password_compromised(string $password, ?stdClass $user = null): string {
+    global $CFG;
+    if (!empty($CFG->passwordpolicy) && !isguestuser($user)) {
+        // Fire any additional password policy functions from plugins.
+        // Plugin functions should output an error message string or empty string for success.
+        $hook = new \core\hook\check_password_compromised($password);
+        \core\di::get(\core\hook\manager::class)->dispatch($hook);
+        return $hook->get_error();
+    }
+    return '';
+}
+
+/**
  * Validate a password against the configured password policy.
  * Note: This function is unaffected by whether the password policy is enabled or not.
  *
  * @param string $password the password to be checked against the password policy
  * @param stdClass|null $user the user object to perform password validation against. Defaults to null if not provided.
- *
+ * @param ?bool $compcheck The compromised check flag.
  * @return string[] Array of error messages.
  */
-function get_password_policy_errors(string $password, ?stdClass $user = null) : array {
+function get_password_policy_errors(string $password, ?stdClass $user = null, ?bool $compcheck = true): array {
     global $CFG;
 
     $errors = [];
@@ -4642,7 +4675,7 @@ function get_password_policy_errors(string $password, ?stdClass $user = null) : 
     if (!check_consecutive_identical_characters($password, $CFG->maxconsecutiveidentchars)) {
         $errors[] = get_string('errormaxconsecutiveidentchars', 'auth', $CFG->maxconsecutiveidentchars);
     }
-    $hook = new \core\hook\check_password_policy($password, $user);
+    $hook = new \core\hook\check_password_policy($password, $user, $compcheck);
     \core\di::get(\core\hook\manager::class)->dispatch($hook);
     $hook->process_legacy_callbacks();
     $pluginerrors = $hook->get_errors();
