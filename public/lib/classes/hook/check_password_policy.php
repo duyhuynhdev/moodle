@@ -27,7 +27,6 @@ namespace core\hook;
 #[\core\attribute\label('Validate a password against the configured password policy')]
 #[\core\attribute\hook\replaces_callbacks('check_password_policy')]
 class check_password_policy {
-
     /** @var array List of errors. */
     private array $errors;
 
@@ -36,20 +35,22 @@ class check_password_policy {
      *
      * @param string $password The password to validate.
      * @param ?\stdClass $user The loggedin user.
+     * @param ?bool $compcheck The compromised check flag.
      */
     public function __construct(
         /** @var string The password to validate */
         public readonly string $password,
-
         /** @var ?\stdClass The loggedin user */
-        public readonly ?\stdClass $user = null) {
+        public readonly ?\stdClass $user = null,
+        /** @var ?bool The compromised check flag */
+        public readonly ?bool $compcheck = true
+    ) {
         $this->errors = [];
     }
 
     /**
      * Add an error messages.
-     *
-     * @return array
+     * @param string $error The error message.
      */
     public function add_errors(string $error): void {
         $this->errors[] = trim($error);
