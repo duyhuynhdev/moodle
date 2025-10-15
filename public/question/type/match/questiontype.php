@@ -157,6 +157,9 @@ class qtype_match extends question_type {
 
     public function get_random_guess_score($questiondata) {
         $q = $this->make_question($questiondata);
+        if (empty($q->choices)) {
+            return null;
+        }
         return 1 / count($q->choices);
     }
 
