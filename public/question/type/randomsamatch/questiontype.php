@@ -167,7 +167,7 @@ class qtype_randomsamatch extends question_type {
      */
     public function get_random_guess_score($question) {
         if (!isset($question->options) || $question->options->choose == 0) {
-           return null;
+            return null;
         }
         return 1/$question->options->choose;
     }
