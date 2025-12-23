@@ -74,6 +74,11 @@ $observers = [
         'eventname'   => '\core\event\course_module_completion_updated',
         'callback'    => 'core_competency\api::observe_course_module_completion_updated',
     ],
+    // Compromised password verification.
+    [
+        'eventname'   => '\core\event\user_password_updated',
+        'callback'    => '\core_user\event\observer::verify_compromised_password',
+    ],
 ];
 
 // List of all events triggered by Moodle can be found using Events list report.
