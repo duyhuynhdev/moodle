@@ -3840,6 +3840,7 @@ function authenticate_user_login(
 ) {
     global $CFG, $DB, $PAGE, $SESSION;
     require_once("$CFG->libdir/authlib.php");
+    $forgoturl = new \moodle_url('/login/forgot_password.php');
 
     if ($user = get_complete_user_data('username', $username, $CFG->mnet_localhost_id)) {
         // we have found the user
@@ -3893,6 +3894,9 @@ function authenticate_user_login(
     $authsenabled = get_enabled_auth_plugins();
 
     if ($user) {
+        if ($user->iscompromised == 1) {
+            redirect($forgoturl, get_string('usercompromisedpassword', 'user'), 1, \core\output\notification::NOTIFY_ERROR);
+        }
         // Use manual if auth not set.
         $auth = empty($user->auth) ? 'manual' : $user->auth;
 
@@ -3977,13 +3981,13 @@ function authenticate_user_login(
         if (!empty($CFG->passwordpolicycheckonlogin)) {
             $compmsg = check_password_compromised($password, $user);
             if ($compmsg) {
+                mark_user_as_compromised($user, 1, get_string("eventusercompromisereasonwhenpasswordupdating"));
                 global $DB;
                 // Set the password to empty, so it cannot be used again, locking the user out.
                 $DB->set_field('user', 'password', '', ['id' => $user->id]);
                 // Destroy all sessions for this user.
                 \core\session\manager::destroy_user_sessions($user->id);
                 // Redirect to the forgot password page with an error message.
-                $forgoturl = new \moodle_url('/login/forgot_password.php');
                 redirect($forgoturl, $compmsg, 1, \core\output\notification::NOTIFY_ERROR);
             }
 
@@ -4643,6 +4647,30 @@ function check_password_compromised(string $password, ?stdClass $user = null): s
     return '';
 }
 
+/**
+ * Mark a user who has a password against has been compromised
+ *
+ * @param stdClass|null $user the user object to mark. Defaults to null if not provided.
+ * @param bool|null $flag the compromised password flag. Defaults to 1 if not provided.
+ * @param string|null $reason the update reason.
+ */
+function mark_user_as_compromised(?stdClass $user = null, $flag = 1, $reason = ""): void {
+    if (!isguestuser($user)) {
+        global $DB, $USER;
+        $DB->set_field('user', 'iscompromised', $flag, ['id' => $user->id]);
+        $eventdata = [
+            "userid" => (!empty($USER) && !empty($USER->id)) ? $USER->id : $user->id,
+            "objectid" => $user->id,
+            "relateduserid" => $user->id,
+            "other" => ["reason" => $reason],
+        ];
+        if ($flag == 1) {
+            \core\event\user_compromised::create($eventdata)->trigger();
+        } else {
+            \core\event\user_compromise_cleared::create($eventdata)->trigger();
+        }
+    }
+}
 /**
  * Validate a password against the configured password policy.
  * Note: This function is unaffected by whether the password policy is enabled or not.
