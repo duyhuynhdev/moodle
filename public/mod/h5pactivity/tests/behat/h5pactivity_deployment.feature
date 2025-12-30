@@ -23,16 +23,44 @@ Feature: Undeployed H5P activities packages should be available only to any user
     And the following "activities" exist:
       | activity    | course | name          | username | packagefilepath                      |
       | h5pactivity | C1     | Music history | teacher1 | h5p/tests/fixtures/filltheblanks.h5p |
-    And I log in as "admin"
-    And I navigate to "Users > Accounts > Browse list of users" in site administration
-    And I press "Delete" action in the "Teacher 1" report row
-    And I click on "Delete" "button" in the "Delete user" "dialogue"
-    And I should see "Deleted user Teacher 1"
 
   @javascript
   Scenario: In an H5P activity, as student I should not be able to deploy the package if not deployed by the teacher
   beforehand. Then if a second teacher deploys the package, I can see it.
-    Given I am on the "Music history" "h5pactivity activity" page logged in as student1
+    Given I log in as "admin"
+    And I navigate to "Users > Accounts > Browse list of users" in site administration
+    And I press "Delete" action in the "Teacher 1" report row
+    And I click on "Delete" "button" in the "Delete user" "dialogue"
+    And I should see "Deleted user Teacher 1"
+    And I log out
+    And I am on the "Music history" "h5pactivity activity" page logged in as student1
+    And I switch to "h5p-player" class iframe
+    And "This file can't be displayed because it has been uploaded by a user without the required capability to deploy H5P content" "text" should exist
+    And I switch to the main frame
+    And I log out
+    # Then teacher2 will be allowed to deploy the package.
+    And I am on the "Music history" "h5pactivity activity" page logged in as teacher2
+    And I switch to "h5p-player" class iframe
+    When I switch to "h5p-iframe" class iframe
+    Then I should see "Of which countries are Berlin"
+    And I switch to the main frame
+    And I log out
+    # Now student1 should be able to see the package.
+    And I am on the "Music history" "h5pactivity activity" page logged in as student1
+    And I switch to "h5p-player" class iframe
+    When I switch to "h5p-iframe" class iframe
+    Then I should see "Of which countries are Berlin"
+
+  @javascript
+  Scenario: In an H5P activity, a second teacher can deploy a package uploaded by a suspended user.
+    Given I log in as "admin"
+    And I navigate to "Users > Accounts > Browse list of users" in site administration
+    And I press "Edit" action in the "Teacher 1" report row
+    And I set the field "Suspended account" to "1"
+    And I press "Update profile"
+    And I should see "Changes saved"
+    And I log out
+    And I am on the "Music history" "h5pactivity activity" page logged in as student1
     And I switch to "h5p-player" class iframe
     And "This file can't be displayed because it has been uploaded by a user without the required capability to deploy H5P content" "text" should exist
     And I switch to the main frame
