@@ -177,7 +177,7 @@ class helper {
 
     /**
      * Checks if the author of the .h5p file is "trustable". If the file hasn't been uploaded by a user with the
-     * required capability, the content won't be deployed, unless the user has been deleted, in this
+     * required capability, the content won't be deployed, unless the user has been deleted or suspended, in this
      * case we check the capability against current user.
      *
      * @param  stored_file $file The .h5p file to be deployed
@@ -192,7 +192,7 @@ class helper {
 
         $context = \context::instance_by_id($file->get_contextid());
         $fileuser = core_user::get_user($userid);
-        if (empty($fileuser) || $fileuser->deleted) {
+        if (empty($fileuser) || $fileuser->deleted || $fileuser->suspended) {
             $userid = null;
         }
         return has_capability('moodle/h5p:deploy', $context, $userid);
@@ -202,7 +202,7 @@ class helper {
      * Checks if the content-type libraries can be upgraded.
      * The H5P content-type libraries can only be upgraded if the author of the .h5p file can manage content-types or if all the
      * content-types exist, to avoid users without the required capability to upload malicious content. If user has been deleted
-     * we check against current user.
+     * or suspended we check against current user.
      *
      * @param  stored_file $file The .h5p file to be deployed
      * @return bool Returns true if the content-type libraries can be created/updated, false otherwise.
@@ -216,7 +216,7 @@ class helper {
         // Check if the owner of the .h5p file has the capability to manage content-types.
         $context = \context::instance_by_id($file->get_contextid());
         $fileuser = core_user::get_user($userid);
-        if (empty($fileuser) || $fileuser->deleted) {
+        if (empty($fileuser) || $fileuser->deleted || $fileuser->suspended) {
             $userid = null;
         }
 

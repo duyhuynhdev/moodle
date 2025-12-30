@@ -284,81 +284,211 @@ final class helper_test extends \advanced_testcase {
             $this->assertContains($error->code, $expectederrorcodes);
         }
     }
+    /**
+     * Data provider for test_can_deploy_package().
+     *
+     * @return array
+     */
+    public static function can_deploy_package_provider(): array {
+        return [
+            'Admin cannot deploy H5P created by user' => [
+                'creator' => 'student',
+                'viewer' => 'admin',
+                'expected' => false,
+            ],
+            'Student can deploy H5P created by teacher' => [
+                'creator' => 'teacher',
+                'viewer' => 'student',
+                'expected' => true,
+            ],
+            'Admin can deploy H5P created by teacher' => [
+                'creator' => 'teacher',
+                'viewer' => 'admin',
+                'expected' => true,
+            ],
+            'Teacher can deploy H5P created by suspended user' => [
+                'creator' => 'suspended',
+                'viewer' => 'teacher',
+                'expected' => true,
+            ],
+            'Admin can deploy H5P created by suspended user' => [
+                'creator' => 'suspended',
+                'viewer' => 'admin',
+                'expected' => true,
+            ],
+            'Student cannot deploy H5P created by suspended user' => [
+                'creator' => 'suspended',
+                'viewer' => 'student',
+                'expected' => false,
+            ],
+            'Teacher can deploy H5P created by deleted user' => [
+                'creator' => 'deleted',
+                'viewer' => 'teacher',
+                'expected' => true,
+            ],
+            'Admin can deploy H5P created by deleted user' => [
+                'creator' => 'deleted',
+                'viewer' => 'admin',
+                'expected' => true,
+            ],
+            'Student cannot deploy H5P created by deleted user' => [
+                'creator' => 'deleted',
+                'viewer' => 'student',
+                'expected' => false,
+            ],
+        ];
+    }
+
+    /**
+     * User candidates for testing can_deploy_package and can_update_librarys.
+     * @param int $courseid ID of the course that user enrol.
+     * @return array
+     */
+    private function get_candidates($courseid) {
+        // Create a student.
+        $student = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user($student->id, $courseid, 'student');
+
+        // Create a teacher.
+        $teacher = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user($teacher->id, $courseid, 'editingteacher');
+
+        // Create a user to be suspended.
+        $usertobesuspended = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user($usertobesuspended->id, $courseid, 'editingteacher');
+        $usertobesuspended->suspended = 1;
+        user_update_user($usertobesuspended, false);
+
+        // Create a user to be deleted.
+        $usertobedeleted = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user($usertobedeleted->id, $courseid, 'editingteacher');
+        delete_user($usertobedeleted);
+
+        return [
+            "teacher" => $teacher,
+            "student" => $student,
+            "suspended" => $usertobesuspended,
+            "deleted" => $usertobedeleted,
+        ];
+    }
 
     /**
      * Test the behaviour of can_deploy_package().
+     * @param string $creator who create a h5p file
+     * @param string $viewer who view (deploy) a h5p file
+     * @param bool $expected Expected result after calling the can_deploy_package method.
+     * @dataProvider can_deploy_package_provider
      */
-    public function test_can_deploy_package(): void {
+    public function test_can_deploy_package($creator, $viewer, $expected): void {
         $this->resetAfterTest();
         $factory = new \core_h5p\factory();
-
-        // Create a user.
-        $user = $this->getDataGenerator()->create_user();
+        $course  = $this->getDataGenerator()->create_course();
+        $context = \context_course::instance($course->id);
         $admin = get_admin();
+        $this->setAdminUser();
+        $candidates = $this->get_candidates($course->id);
+        $candidates["admin"] = $admin;
+        $createuser = $candidates[$creator];
+        $viewuser = $candidates[$viewer];
 
         // Prepare a valid .H5P file.
         $path = self::get_fixture_path(__NAMESPACE__, 'greeting-card.h5p');
-
         // Files created by users can't be deployed.
-        $file = helper::create_fake_stored_file_from_path($path, (int)$user->id);
+        $file = helper::create_fake_stored_file_from_path($path, (int)$createuser->id, $context);
         $factory->get_framework()->set_file($file);
+        $this->setUser($viewuser);
         $candeploy = helper::can_deploy_package($file);
-        $this->assertFalse($candeploy);
+        $this->assertEquals($expected, $candeploy);
+    }
 
-        // Files created by admins can be deployed, even when the current user is not the admin.
-        $this->setUser($user);
-        $file = helper::create_fake_stored_file_from_path($path, (int)$admin->id);
-        $factory->get_framework()->set_file($file);
-        $candeploy = helper::can_deploy_package($file);
-        $this->assertTrue($candeploy);
-
-        $usertobedeleted = $this->getDataGenerator()->create_user();
-        $this->setUser($usertobedeleted);
-        $file = helper::create_fake_stored_file_from_path($path, (int)$usertobedeleted->id);
-        $factory->get_framework()->set_file($file);
-        // Then we delete this user.
-        $this->setAdminUser();
-        delete_user($usertobedeleted);
-        $candeploy = helper::can_deploy_package($file);
-        $this->assertTrue($candeploy); // We can update as admin.
+    /**
+     * Data provider for test_can_update_library().
+     *
+     * @return array
+     */
+    public static function can_update_library_provider(): array {
+        return [
+            'Admin cannot update H5P created by teacher' => [
+                'creator' => 'teacher',
+                'updater' => 'admin',
+                'expected' => false,
+            ],
+            'Student cannot update H5P created by teacher' => [
+                'creator' => 'teacher',
+                'updater' => 'student',
+                'expected' => false,
+            ],
+            'Teacher can update H5P created by admin' => [
+                'creator' => 'admin',
+                'updater' => 'teacher',
+                'expected' => true,
+            ],
+            'Student can update H5P created by admin' => [
+                'creator' => 'admin',
+                'updater' => 'student',
+                'expected' => true,
+            ],
+            'Teacher cannot update H5P created by suspended user' => [
+                'creator' => 'suspended',
+                'updater' => 'teacher',
+                'expected' => false,
+            ],
+            'Admin can update H5P created by suspended user' => [
+                'creator' => 'suspended',
+                'updater' => 'admin',
+                'expected' => true,
+            ],
+            'Student cannot update H5P created by suspended user' => [
+                'creator' => 'suspended',
+                'updater' => 'student',
+                'expected' => false,
+            ],
+            'Teacher cannot update H5P created by deleted user' => [
+                'creator' => 'deleted',
+                'updater' => 'teacher',
+                'expected' => false,
+            ],
+            'Admin can update H5P created by deleted user' => [
+                'creator' => 'deleted',
+                'updater' => 'admin',
+                'expected' => true,
+            ],
+            'Student cannot update H5P created by deleted user' => [
+                'creator' => 'deleted',
+                'updater' => 'student',
+                'expected' => false,
+            ],
+        ];
     }
 
     /**
      * Test the behaviour of can_update_library().
+     * @param string $creator who create a h5p file
+     * @param string $updater who update a h5p file
+     * @param bool $expected Expected result after calling the can_update_library method.
+     * @dataProvider can_update_library_provider
      */
-    public function test_can_update_library(): void {
+    public function test_can_update_library($creator, $updater, $expected): void {
         $this->resetAfterTest();
         $factory = new \core_h5p\factory();
-
-        // Create a user.
-        $user = $this->getDataGenerator()->create_user();
+        $course  = $this->getDataGenerator()->create_course();
+        $context = \context_course::instance($course->id);
         $admin = get_admin();
+        $this->setAdminUser();
+        $candidates = $this->get_candidates($course->id);
+        $candidates["admin"] = $admin;
+        $createuser = $candidates[$creator];
+        $updateuser = $candidates[$updater];
 
         // Prepare a valid .H5P file.
         $path = self::get_fixture_path(__NAMESPACE__, 'greeting-card.h5p');
 
         // Libraries can't be updated when the file has been created by users.
-        $file = helper::create_fake_stored_file_from_path($path, (int)$user->id);
+        $file = helper::create_fake_stored_file_from_path($path, (int)$createuser->id, $context);
         $factory->get_framework()->set_file($file);
-        $candeploy = helper::can_update_library($file);
-        $this->assertFalse($candeploy);
-
-        // Libraries can be updated when the file has been created by admin, even when the current user is not the admin.
-        $this->setUser($user);
-        $file = helper::create_fake_stored_file_from_path($path, (int)$admin->id);
-        $factory->get_framework()->set_file($file);
-        $candeploy = helper::can_update_library($file);
-        $this->assertTrue($candeploy);
-
-        $usertobedeleted = $this->getDataGenerator()->create_user();
-        $this->setUser($usertobedeleted);
-        $file = helper::create_fake_stored_file_from_path($path, (int)$usertobedeleted->id);
-        $factory->get_framework()->set_file($file);
-        // Then we delete this user.
-        $this->setAdminUser();
-        delete_user($usertobedeleted);
+        $this->setUser($updateuser);
         $canupdate = helper::can_update_library($file);
-        $this->assertTrue($canupdate); // We can update as admin.
+        $this->assertEquals($expected, $canupdate);
     }
 
     /**
