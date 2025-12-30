@@ -312,6 +312,17 @@ final class helper_test extends \advanced_testcase {
         $candeploy = helper::can_deploy_package($file);
         $this->assertTrue($candeploy);
 
+        $usertobesuspended = $this->getDataGenerator()->create_user();
+        $this->setUser($usertobesuspended);
+        $file = helper::create_fake_stored_file_from_path($path, (int)$usertobesuspended->id);
+        $factory->get_framework()->set_file($file);
+        // Then we delete this user.
+        $this->setAdminUser();
+        $usertobesuspended->suspended = 1;
+        user_update_user($usertobesuspended, false);
+        $candeploy = helper::can_deploy_package($file);
+        $this->assertTrue($candeploy); // We can update as admin.
+
         $usertobedeleted = $this->getDataGenerator()->create_user();
         $this->setUser($usertobedeleted);
         $file = helper::create_fake_stored_file_from_path($path, (int)$usertobedeleted->id);
@@ -349,6 +360,18 @@ final class helper_test extends \advanced_testcase {
         $factory->get_framework()->set_file($file);
         $candeploy = helper::can_update_library($file);
         $this->assertTrue($candeploy);
+
+
+        $usertobesuspended = $this->getDataGenerator()->create_user();
+        $this->setUser($usertobesuspended);
+        $file = helper::create_fake_stored_file_from_path($path, (int)$usertobesuspended->id);
+        $factory->get_framework()->set_file($file);
+        // Then we delete this user.
+        $this->setAdminUser();
+        $usertobesuspended->suspended = 1;
+        user_update_user($usertobesuspended, false);
+        $candeploy = helper::can_update_library($file);
+        $this->assertTrue($candeploy); // We can update as admin.
 
         $usertobedeleted = $this->getDataGenerator()->create_user();
         $this->setUser($usertobedeleted);
