@@ -896,15 +896,7 @@ function course_module_bulk_update_calendar_events($modulename, $courseid = 0) {
         }
     }
 
-    $courses = [];
     foreach ($instances as $instance) {
-        if (!isset($courses[$instance->course])) {
-            $courses[$instance->course] = $DB->record_exists('course', ['id' => $instance->course]);
-        }
-        if (empty($courses[$instance->course])) {
-            // Skip if the course doesn't exist.
-            continue;
-        }
         if ($cm = get_coursemodule_from_instance($modulename, $instance->id, $instance->course)) {
             // Optional check for modules mid-delete.
             if (!empty($cm->deletioninprogress)) {
@@ -917,10 +909,21 @@ function course_module_bulk_update_calendar_events($modulename, $courseid = 0) {
                 course_module_calendar_event_update_process($instance, $cm);
             } catch (Exception $e) {
                 $errorcode = $e->errorcode ?? '';
+                if ($errorcode === 'invalidrecord') {
+                    debugging(
+                        get_string('calendareventskipformissingcourse', 'error', $instance->course),
+                        DEBUG_DEVELOPER
+                    );
+                    continue;
+                }
                 if ($errorcode === 'invalidcoursemoduleid' || $errorcode === 'invalidmoduleid') {
-                    mtrace(
-                        "Skipping calendar update for broken {$modulename} instance {$instance->id} " .
-                        "in course {$instance->course}, cm {$cm->id}",
+                    $a = new stdClass();
+                    $a->modulename = $modulename;
+                    $a->instance = $instance->id;
+                    $a->course = $instance->course;
+                    $a->cm = $cm->id;
+                    debugging(
+                        get_string('calendareventskipforbrokencoursemodule', 'error', $a),
                         DEBUG_DEVELOPER
                     );
                     continue;

@@ -4196,7 +4196,7 @@ final class courselib_test extends advanced_testcase {
 
         $course = $this->getDataGenerator()->create_course(['enablecompletion' => COMPLETION_ENABLED]);
         $course2 = $this->getDataGenerator()->create_course(['enablecompletion' => COMPLETION_ENABLED]);
-        $assign = $this->getDataGenerator()->create_module('assign', [
+        $this->getDataGenerator()->create_module('assign', [
                     'course' => $course,
                     'completionexpected' => $completionexpected,
                     'duedate' => $duedate
@@ -4213,11 +4213,15 @@ final class courselib_test extends advanced_testcase {
 
         // Success even the course has been deleted.
         $DB->delete_records('course', ['id' => $course->id]);
+        $debugingmessage = get_string('calendareventskipformissingcourse', 'error', $course->id);
         // Update all assign instances.
         $this->assertTrue(course_module_bulk_update_calendar_events('assign'));
+        $this->assertDebuggingCalled($debugingmessage, DEBUG_DEVELOPER);
+        $this->resetDebugging();
         // Update the assign instances for this course.
         $this->assertTrue(course_module_bulk_update_calendar_events('assign', $course->id));
-
+        $this->assertDebuggingCalled($debugingmessage, DEBUG_DEVELOPER);
+        $this->resetDebugging();
         $course3 = $this->getDataGenerator()->create_course(['enablecompletion' => COMPLETION_ENABLED]);
         $brokenassign = $this->getDataGenerator()->create_module('assign', [
             'course' => $course3,
@@ -4258,24 +4262,19 @@ final class courselib_test extends advanced_testcase {
         } catch (\moodle_exception $e) {
             $this->assertNotEmpty($e->getMessage());
         }
-
         // Update all assign instances. The broken instance should be skipped, not fatal.
-        ob_start();
+        $a = new stdClass();
+        $a->modulename = "assign";
+        $a->instance = $brokenassign->id;
+        $a->course = $course3->id;
+        $a->cm = $cm->id;
+        $brokenmessage = get_string('calendareventskipforbrokencoursemodule', 'error', $a);
         $this->assertTrue(course_module_bulk_update_calendar_events('assign'));
-        $output = ob_get_clean();
-        $this->assertStringContainsString(
-            "Skipping calendar update for broken assign instance {$brokenassign->id} in course {$course3->id}, cm {$cm->id}",
-            $output
-        );
-
+        // With module name 'assign' it will include the missing course above so 2 different messages are expected.
+        $this->assertDebuggingCalledCount(2, [$debugingmessage, $brokenmessage], [DEBUG_DEVELOPER, DEBUG_DEVELOPER]);
         // Update the broken course only. It should also skip cleanly.
-        ob_start();
         $this->assertTrue(course_module_bulk_update_calendar_events('assign', $course3->id));
-        $output = ob_get_clean();
-        $this->assertStringContainsString(
-            "Skipping calendar update for broken assign instance {$brokenassign->id} in course {$course3->id}, cm {$cm->id}",
-            $output
-        );
+        $this->assertDebuggingCalled($brokenmessage, DEBUG_DEVELOPER);
     }
 
     /**
