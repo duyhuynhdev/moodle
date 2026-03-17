@@ -4212,11 +4212,70 @@ final class courselib_test extends advanced_testcase {
         $this->assertTrue(course_module_bulk_update_calendar_events('assign', $course->id));
 
         // Success even the course has been deleted.
-        $DB->delete_records('course', array('id' => $course->id));
+        $DB->delete_records('course', ['id' => $course->id]);
         // Update all assign instances.
         $this->assertTrue(course_module_bulk_update_calendar_events('assign'));
         // Update the assign instances for this course.
         $this->assertTrue(course_module_bulk_update_calendar_events('assign', $course->id));
+
+        $course3 = $this->getDataGenerator()->create_course(['enablecompletion' => COMPLETION_ENABLED]);
+        $brokenassign = $this->getDataGenerator()->create_module('assign', [
+            'course' => $course3,
+            'completionexpected' => $completionexpected,
+            'duedate' => $duedate,
+        ]);
+
+        // Corrupt the course structure for one assign instance while keeping
+        // mdl_course_modules and mdl_assign valid. This reproduces the case where
+        // get_coursemodule_from_instance() succeeds, but modinfo cannot resolve the cm.
+        $cm = get_coursemodule_from_instance('assign', $brokenassign->id, $course3->id, false, MUST_EXIST);
+        $this->assertNotEmpty($cm);
+
+        $section = $DB->get_record('course_sections', ['id' => $cm->section], '*', MUST_EXIST);
+        $sequence = array_filter(
+            explode(',', (string)$section->sequence),
+            static function (string $id): bool {
+                return !empty($id);
+            }
+        );
+        $sequence = array_values(array_filter(
+            $sequence,
+            static function (string $id) use ($cm): bool {
+                return (int)$id !== (int)$cm->id;
+            }
+        ));
+
+        $DB->set_field('course_sections', 'sequence', implode(',', $sequence), ['id' => $section->id]);
+        rebuild_course_cache($course3->id, true);
+
+        // Sanity check: DB lookup still works, but modinfo lookup now fails.
+        $cmcheck = get_coursemodule_from_instance('assign', $brokenassign->id, $course3->id, false, MUST_EXIST);
+        $this->assertEquals($cm->id, $cmcheck->id);
+
+        try {
+            get_fast_modinfo($course3->id)->get_cm($cm->id);
+            $this->fail('Expected get_cm() to fail for a broken course structure.');
+        } catch (\moodle_exception $e) {
+            $this->assertNotEmpty($e->getMessage());
+        }
+
+        // Update all assign instances. The broken instance should be skipped, not fatal.
+        ob_start();
+        $this->assertTrue(course_module_bulk_update_calendar_events('assign'));
+        $output = ob_get_clean();
+        $this->assertStringContainsString(
+            "Skipping calendar update for broken assign instance {$brokenassign->id} in course {$course3->id}, cm {$cm->id}",
+            $output
+        );
+
+        // Update the broken course only. It should also skip cleanly.
+        ob_start();
+        $this->assertTrue(course_module_bulk_update_calendar_events('assign', $course3->id));
+        $output = ob_get_clean();
+        $this->assertStringContainsString(
+            "Skipping calendar update for broken assign instance {$brokenassign->id} in course {$course3->id}, cm {$cm->id}",
+            $output
+        );
     }
 
     /**
